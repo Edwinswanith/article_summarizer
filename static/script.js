@@ -1,124 +1,92 @@
-document.querySelector('form')?.addEventListener('submit', function(e) {
-    const btn = document.getElementById('submitBtn');
-    btn.innerHTML = `
-        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-        <span class="ms-2">Processing...</span>
-    `;
-    btn.disabled = true;
-});
-
-// Initialize Popovers with custom template and close functionality
 document.addEventListener('DOMContentLoaded', function () {
-    const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
+    // Submit button spinner
+    document.querySelector('form')?.addEventListener('submit', function(e) {
+        const btn = document.getElementById('submitBtn');
+        btn.innerHTML = `
+            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+            <span class="ms-2">Processing...</span>
+        `;
+        btn.disabled = true;
+    });
 
-    popoverTriggerList.forEach(popoverTriggerEl => {
-        const popover = new bootstrap.Popover(popoverTriggerEl, {
-            html: true,
-            sanitize: false, // We are using a safe title, so this is okay.
-            title: function () {
-                // Fix: Use the `popoverTriggerEl` from the outer scope, as `this` is not the element here.
-                const title = popoverTriggerEl.getAttribute('data-bs-title');
-                return `${title}<button type="button" class="btn-close popover-close" aria-label="Close"></button>`;
-            }
-        });
+    // Source panel logic
+    const sourceBadges = document.querySelectorAll('.source-badge');
+    const resultsContainer = document.querySelector('.results-container');
+    const sourceContainer = document.getElementById('sourceContainer');
+    const sourceTitle = document.getElementById('sourceTitle');
+    const sourceText = document.getElementById('sourceText');
+    const sourceCloseBtn = document.getElementById('sourceCloseBtn');
 
-        // Hide other popovers when a new one is shown
-        popoverTriggerEl.addEventListener('click', function(e) {
-            popoverTriggerList.forEach(el => {
-                if (el !== popoverTriggerEl) {
-                    bootstrap.Popover.getInstance(el)?.hide();
+    if (resultsContainer && sourceContainer) {
+        sourceBadges.forEach(badge => {
+            badge.addEventListener('click', function () {
+                const page = this.dataset.pageNumber;
+                const text = this.dataset.sourceText;
+                const isCurrentlyVisible = resultsContainer.classList.contains('source-visible');
+
+                if (isCurrentlyVisible && sourceTitle.textContent.includes(`Page ${page}`)) {
+                    resultsContainer.classList.remove('source-visible');
+                } else {
+                    sourceTitle.textContent = `Source (Page ${page})`;
+                    if (window.marked) {
+                        sourceText.innerHTML = marked.parse(text);
+                    } else {
+                        sourceText.textContent = text;
+                    }
+                    resultsContainer.classList.add('source-visible');
                 }
             });
         });
-    });
 
-    // Add a global click listener to handle closing popovers
-    document.addEventListener('click', function (e) {
-        const target = e.target;
+        sourceCloseBtn?.addEventListener('click', function() {
+            resultsContainer.classList.remove('source-visible');
+        });
+    }
 
-        // If the click is on our custom close button
-        if (target.classList.contains('popover-close')) {
-            const popoverEl = target.closest('.popover');
-            if (popoverEl) {
-                const trigger = document.querySelector(`[aria-describedby="${popoverEl.id}"]`);
-                if (trigger) {
-                    bootstrap.Popover.getInstance(trigger)?.hide();
+    // Audio player time update handler
+    const audioPlayer = document.getElementById('audioPlayer');
+    if (audioPlayer) {
+        const words = document.querySelectorAll('.word');
+        let totalChars = 0;
+        const wordMetas = Array.from(words).map(word => {
+            const wordText = word.textContent || word.innerText;
+            const start = totalChars;
+            totalChars += wordText.length + 1; // +1 for space
+            return { el: word, start, end: totalChars - 1 };
+        });
+
+        let currentWordIndex = -1;
+        audioPlayer.addEventListener('timeupdate', function() {
+            if (!audioPlayer.duration || totalChars === 0) return;
+
+            const progress = audioPlayer.currentTime / audioPlayer.duration;
+            const currentChar = Math.floor(progress * totalChars);
+
+            let foundWordIndex = -1;
+            for (let i = 0; i < wordMetas.length; i++) {
+                if (currentChar >= wordMetas[i].start && currentChar < wordMetas[i].end) {
+                    foundWordIndex = i;
+                    break;
                 }
             }
-            return;
-        }
-        
-        // If the click is outside a popover and its trigger
-        const isPopoverTrigger = target.closest('[data-bs-toggle="popover"]');
-        const inPopover = target.closest('.popover');
 
-        if (!isPopoverTrigger && !inPopover) {
-            popoverTriggerList.forEach(el => {
-                const popover = bootstrap.Popover.getInstance(el);
-                if (popover) {
-                    popover.hide();
+            if (foundWordIndex !== -1 && foundWordIndex !== currentWordIndex) {
+                if (currentWordIndex !== -1) {
+                    wordMetas[currentWordIndex].el.classList.remove('highlight');
+                }
+                wordMetas[foundWordIndex].el.classList.add('highlight');
+                wordMetas[foundWordIndex].el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+                currentWordIndex = foundWordIndex;
+            }
+        });
+
+        words.forEach((word, index) => {
+            word.addEventListener('click', function() {
+                if (audioPlayer.duration && totalChars > 0) {
+                    const timePosition = (wordMetas[index].start / totalChars) * audioPlayer.duration;
+                    audioPlayer.currentTime = timePosition;
                 }
             });
-        }
-    });
+        });
+    }
 });
-
-
-// Audio player time update handler
-const audioPlayer = document.getElementById('audioPlayer');
-if (audioPlayer) {
-    const words = document.querySelectorAll('.word');
-    const wordMetas = [];
-    let totalChars = 0;
-
-    let currentCharlength = 0;
-    words.forEach(word => {
-        const wordText = word.textContent || word.innerText;
-        word.dataset.startChar = currentCharlength;
-        wordMetas.push({
-            startChar: currentCharlength,
-            endChar: currentCharlength + wordText.length,
-        });
-        currentCharlength += wordText.length + 1; // for space
-    });
-    totalChars = currentCharlength > 0 ? currentCharlength - 1 : 0;
-
-    let currentWordIndex = -1;
-    audioPlayer.addEventListener('timeupdate', function() {
-        if (!audioPlayer.duration) return;
-
-        const progress = audioPlayer.currentTime / audioPlayer.duration;
-        const currentCharacter = Math.floor(progress * totalChars);
-
-        let foundWordIndex = -1;
-        // Find what word should be highlighted
-        for (let i = 0; i < wordMetas.length; i++) {
-            if (currentCharacter >= wordMetas[i].startChar && currentCharacter < wordMetas[i].endChar) {
-                foundWordIndex = i;
-                break;
-            }
-        }
-
-        if (foundWordIndex !== -1 && foundWordIndex !== currentWordIndex) {
-            // Remove highlight from the previous word
-            if (currentWordIndex !== -1) {
-                words[currentWordIndex].classList.remove('highlight');
-            }
-            // Add highlight to the current word
-            words[foundWordIndex].classList.add('highlight');
-            words[foundWordIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
-            currentWordIndex = foundWordIndex;
-        }
-    });
-
-    // Click on a word to jump to the corresponding audio position
-    words.forEach(word => {
-        word.addEventListener('click', function() {
-            const startChar = parseInt(this.dataset.startChar);
-            if (!isNaN(startChar) && audioPlayer.duration) {
-                const timePosition = (startChar / totalChars) * audioPlayer.duration;
-                audioPlayer.currentTime = timePosition;
-            }
-        });
-    });
-}

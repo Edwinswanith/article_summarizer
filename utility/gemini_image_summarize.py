@@ -1,7 +1,6 @@
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
-import fitz  # PyMuPDF
 from PIL import Image
 
 def initialize_gemini():
@@ -9,33 +8,51 @@ def initialize_gemini():
     load_dotenv()
     api_key = os.getenv('GEMINI_API_KEY')
     genai.configure(api_key=api_key)
-    return genai.GenerativeModel('gemini-2.5-flash-lite')
+    # The official model name requires the 'models/' prefix. Use a fallback if the vision model isn't available.
+    model_names = ["models/gemini-pro-vision", "models/gemini-1.0-pro-vision", "models/gemini-pro"]
+    for name in model_names:
+        try:
+            return genai.GenerativeModel(name)
+        except Exception:
+            continue
+    # If none of the preferred models are available, raise the last exception implicitly
+    raise ValueError("No suitable Gemini vision model found. Please check your API access.")
 
-
-def gemini_image_summarize(images):
+def gemini_image_summarize(image_paths):
     """
-    Summarize text using Gemini API
+    Summarize images using Gemini API.
     Args:
-        text (str): Text content to summarize
+        image_paths (list): A list of paths to image files.
     Returns:
-        str: Summarized text
+        list: A list of summarized text for each image, or a signal on failure.
     """
     try:
         model = initialize_gemini()
-        summary = []
-        for image in images:
-            prompt = f"""
-                Analyze the provided image and identify any charts, graphs, or visual data representations present within it. Focus on summarizing the content and key insights of these images or charts in clear, concise language. Your summary should highlight the main information, trends, or conclusions depicted, and be no longer than 100 words. If there are multiple charts or images, briefly mention each and their significance. Do not include irrelevant details—concentrate on the visual data and its meaning.
-                The image is:
-                {image}
-            """
+        # Heuristic to check if the loaded model actually supports vision.
+        if "-vision" not in getattr(model, "_model_name", ""):
+            return ["VISION_MODEL_UNAVAILABLE"] * len(image_paths)
 
-            response = model.generate_content(prompt)
-            summary.append(response.text)
-        return summary
-        
-    except Exception as e:
-        return f"Error generating summary: {str(e)}"
-    
+        summaries = []
+        for image_path in image_paths:
+            try:
+                img = Image.open(image_path)
+                prompt = "Analyze the image (chart, graph, table) and summarize its key insights in under 100 words, including important numbers."
+                # Add a timeout to prevent long hangs on unresponsive API calls
+                response = model.generate_content([prompt, img], request_options={"timeout": 10})
+                summaries.append(response.text)
+            except Exception as e:
+                # If any image fails with a core API error, assume all will fail.
+                if "generateContent" in str(e) or "API key" in str(e):
+                    return ["VISION_API_FAILED"] * len(image_paths)
+                summaries.append(f"Could not process image: {os.path.basename(image_path)}")
+        return summaries
+    except Exception:
+        # Catches errors from initialize_gemini or other setup issues.
+        return ["VISION_MODEL_UNAVAILABLE"] * len(image_paths)
+
 if __name__ == "__main__":
-    print(gemini_image_summarize("/home/bizzzup/Documents/Web_Application/Backup/25904633.pdf"))
+    # Example usage:
+    # Make sure to have a "test_images" directory with some images for this to work.
+    # test_image_paths = ["test_images/chart.png", "test_images/graph.jpg"]
+    # print(gemini_image_summarize(test_image_paths))
+    pass

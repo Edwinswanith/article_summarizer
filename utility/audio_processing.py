@@ -8,6 +8,13 @@ import numpy as np
 import torch
 import wave, contextlib
 from transformers import pipeline
+from flask import session
+import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).parent.parent
+AUDIO_FOLDER = BASE_DIR / "static" / "audio"
+os.makedirs(AUDIO_FOLDER, exist_ok=True)
 
 def initialize_tts():
     """Initialize the text-to-speech pipeline"""
@@ -18,13 +25,12 @@ def initialize_tts():
         device=device
     )   
 
-def convert_text_to_audio(text, output_filename):
+def convert_text_to_audio(text):
     """
     Convert text to audio and save as WAV file
     
     Args:
         text (str): Text to convert to speech
-        output_filename (str): Path where to save the WAV file
     """
     tts = initialize_tts()
     
@@ -38,10 +44,12 @@ def convert_text_to_audio(text, output_filename):
     audio_int16 = (audio * 32767).astype(np.int16)
 
     # Save as WAV file
+    audio_filename = f"{session.get('user_id')}_audio.wav"
+    output_filename = os.path.join(AUDIO_FOLDER, audio_filename)
     with contextlib.closing(wave.open(output_filename, "wb")) as wf:
         wf.setnchannels(1)
         wf.setsampwidth(2)
         wf.setframerate(sr)
         wf.writeframes(audio_int16.tobytes())
 
-    return len(audio_int16), sr
+    return audio_filename 

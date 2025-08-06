@@ -7,25 +7,44 @@ from PIL import Image
 import uuid
 
 
-def _is_potential_logo(bbox, page_width, page_height, max_dim=100, corner_threshold=50):
+def _is_potential_logo(bbox, page_width, page_height, max_dim=80, corner_threshold=40):
     """
     Heuristically checks if a bounding box likely contains a logo.
-    Criteria: Small size and proximity to page corners.
+    Criteria: Small size AND proximity to page corners AND aspect ratio.
     """
     x0, y0, x1, y1 = bbox
     width, height = x1 - x0, y1 - y0
 
-    # Check size
+    # Check size - logos are typically small
     if width > max_dim or height > max_dim:
         return False
 
-    # Check proximity to corners
+    # Check aspect ratio - logos are usually not extremely elongated
+    aspect_ratio = max(width, height) / min(width, height)
+    if aspect_ratio > 4:  # Very elongated shapes are unlikely to be logos
+        return False
+
+    # Check proximity to corners - logos are typically in corners
     is_near_top_left = x0 < corner_threshold and y0 < corner_threshold
     is_near_top_right = (page_width - x1) < corner_threshold and y0 < corner_threshold
     is_near_bottom_left = x0 < corner_threshold and (page_height - y1) < corner_threshold
     is_near_bottom_right = (page_width - x1) < corner_threshold and (page_height - y1) < corner_threshold
 
-    return is_near_top_left or is_near_top_right or is_near_bottom_left or is_near_bottom_right
+    # Must be near a corner to be considered a logo
+    is_near_corner = is_near_top_left or is_near_top_right or is_near_bottom_left or is_near_bottom_right
+    
+    # Additional check: if it's in the center area of the page, it's likely not a logo
+    center_x = page_width / 2
+    center_y = page_height / 2
+    bbox_center_x = (x0 + x1) / 2
+    bbox_center_y = (y0 + y1) / 2
+    
+    # If it's in the central 60% of the page, it's unlikely to be a logo
+    if (0.2 * page_width < bbox_center_x < 0.8 * page_width and 
+        0.2 * page_height < bbox_center_y < 0.8 * page_height):
+        return False
+
+    return is_near_corner
 
 def _merge_rects(rects, inflation=5):
     """Helper to merge overlapping or nearby rectangles."""
@@ -148,8 +167,8 @@ def process_pdf_for_rag(pdf_path: str, base_output_dir: str) -> tuple[list[dict]
             if is_part_of_existing_image:
                 continue
 
-            # Check if it's a potential logo before saving
-            if _is_potential_logo(rect, page.rect.width, page.rect.height, max_dim=100, corner_threshold=50):
+            # Check if it's a potential logo before saving - more restrictive for drawings
+            if _is_potential_logo(rect, page.rect.width, page.rect.height, max_dim=60, corner_threshold=30):
                 print(f"Skipping potential logo (drawing) on page {page_num} at {rect}")
                 continue
 

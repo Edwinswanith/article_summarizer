@@ -7,7 +7,18 @@ def initialize_gemini():
     load_dotenv()
     api_key = os.getenv('GEMINI_API_KEY')
     genai.configure(api_key=api_key)
-    return genai.GenerativeModel('gemini-2.5-flash-lite')
+    # Use a stable, generally-available text model.
+    model_names = [
+        "models/gemini-1.5-flash-latest",
+        "models/gemini-1.5-flash",
+        "models/gemini-pro"
+    ]
+    for name in model_names:
+        try:
+            return genai.GenerativeModel(name)
+        except Exception:
+            continue
+    raise ValueError("No suitable Gemini text model found. Check API access.")
 
 def gemini_summarize(text):
     """
@@ -21,10 +32,10 @@ def gemini_summarize(text):
         model = initialize_gemini()
         
         prompt = f"""
-            Summarize the following text in no more than 500 words.
+            Provide a detailed and comprehensive summary of the following text.
             The summary must cover all pages and sections—do not skip any page or content.
-            Ensure all key points, main ideas, important details, supporting evidence, subtle implications, relationships between concepts, and notable conclusions from the entire document are included.
-            The summary should be cohesive and fully reflect the complete content, but remain under 500 words.
+            Ensure all key points, main ideas, important details, supporting evidence, and notable conclusions from the entire document are included.
+            The summary should be well-structured, cohesive, and fully reflect the complete content of the document.
             {text}
         """
 
