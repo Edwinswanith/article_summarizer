@@ -1,0 +1,17 @@
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+*.pywz
+*.pyzw
+*.pyzwz
+instance/
+count.py
+test.py
+.env
+uploads/
+static/audio/
+static/images/
